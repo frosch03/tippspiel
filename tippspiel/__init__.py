@@ -1,0 +1,1 @@
+from .tippspiel import Tippspiel
