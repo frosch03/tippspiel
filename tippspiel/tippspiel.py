@@ -50,12 +50,13 @@ import requests
 class Tippspiel(object):
     def __init__(self):
         self.__apiHeader   = {'X-Auth-Token': ''}
+        self.__proxy   = {'http': ''}
         self.__apiEndpoint = 'http://api.football-data.org/v1/soccerseasons/424/fixtures'
 
         self.__matchResults = {}
         self.__fixtures     = []
         
-        self.__users        = {}
+        self.users          = {}
         self.__matchNames   = []
         self.__userTips     = {}
 
@@ -63,9 +64,11 @@ class Tippspiel(object):
     def setApiToken(self, _apiToken):
         self.__apiHeader['X-Auth-Token'] = _apiToken
 
+    def setProxy(self, _httpProxy):
+        self.__proxy['http'] = _httpProxy
 
-    def updateResults(self):
-        self.__emData   = requests.get(self.__apiEndpoint, headers=self.__apiHeader)
+    def __updateResults(self):
+        self.__emData   = requests.get(self.__apiEndpoint, headers=self.__apiHeader, proxies=self.__proxy)
         self.__fixtures = sorted(self.__emData.json()['fixtures'],
                                  key=lambda x:x['date'],
                                  reverse=True)
@@ -74,12 +77,12 @@ class Tippspiel(object):
                                       'goalsAwayTeam': x['result']['goalsAwayTeam'],
                                       'date':          x['date']
                                     }
-                                for x in fixtures if x['status'] == "FINISHED"}
+                                for x in self.__fixtures if x['status'] == "FINISHED"}
         self.__maxGameNameLenOfResults = max([len(x) for x in self.__matchResults.keys()])
 
 
     def addUser(self, _gName, _sName, _short):
-        self.__users[_short] = {'gName': _gName, 'sName': _sName}
+        self.users[_short] = {'gName': _gName, 'sName': _sName}
 
 
     def defineMatchNames(self, _homeName, _awayName):
@@ -88,10 +91,10 @@ class Tippspiel(object):
 
     def __assignUserTipsWithMatches(self, _user):
         for ((homeTip,guestTip), (homeTeam,guestTeam)) in zip(self.__userTips[_user], self.__matchNames):
-            self.__users[_user][(homeTeam+"-"+guestTeam)] = {}
-            self.__users[_user][(homeTeam+"-"+guestTeam)]['tipGoalsHomeTeam'] = homeTip
-            self.__users[_user][(homeTeam+"-"+guestTeam)]['tipGoalsAwayTeam'] = guestTip
-            self.__users[_user]['points'] = 0
+            self.users[_user][(homeTeam+"-"+guestTeam)] = {}
+            self.users[_user][(homeTeam+"-"+guestTeam)]['tipGoalsHomeTeam'] = homeTip
+            self.users[_user][(homeTeam+"-"+guestTeam)]['tipGoalsAwayTeam'] = guestTip
+            self.users[_user]['points'] = 0
 
 
     def addUserTip(self, _user, _tip):
@@ -107,36 +110,43 @@ class Tippspiel(object):
             self.__assignUserTipsWithMatches(_user)
             
 
-    def updateUserPoints(self, _user):
+    def __updateUserPoints(self, _user):
         for match in self.__matchResults.keys():
             goalsHome = self.__matchResults[match]['goalsHomeTeam']
             goalsAway = self.__matchResults[match]['goalsAwayTeam']
 
-            tipHome = self.__users[_user][match]['tipGoalsHomeTeam']
-            tipAway = self.__users[_user][match]['tipGoalsAwayTeam']
+            tipHome = self.users[_user][match]['tipGoalsHomeTeam']
+            tipAway = self.users[_user][match]['tipGoalsAwayTeam']
 
             if   (tipHome == goalsHome and tipAway == goalsAway):
-                self.__users[_user]['points'] += 2
+                self.users[_user]['points'] += 2
     
             elif ((goalsHome == goalsAway and tipHome == tipAway) or \
                   (goalsHome  > goalsAway and tipHome  > tipAway) or \
                   (goalsHome  < goalsAway and tipHome  < tipAway)):
-                self.__users[_user]['points'] += 1
+                self.users[_user]['points'] += 1
 
 
     def printUsers(self):
-        maxUserKeyLen = max([len(x) for x in self.__users.keys()])
-        for user in self.__users.keys():
+        maxUserKeyLen = max([len(x) for x in self.users.keys()])
+        for user in self.users.keys():
             print('('+ user.rjust(maxUserKeyLen) +')', end=': ')
-            print(self.__users[user]['gName'], end=' ')
-            print(self.__users[user]['sName'])
+            print(self.users[user]['gName'], end=' ')
+            print(self.users[user]['sName'])
     
     
-    def printResults(self, _users):
+
+    def __updateAllUserPoints(self):
+        for user in self.users.keys():
+            self.__updateUserPoints(user)
+
+    def printResults(self):
+        self.__updateResults()
+        self.__updateAllUserPoints()
         result = []
-        for user in self.__users.keys():
-            result.append(((self.__users[user]['points']),
-                           self.__users[user]['gName'] + " " + self.__users[user]['sName']))
+        for user in self.users.keys():
+            result.append(((self.users[user]['points']),
+                           self.users[user]['gName'] + " " + self.users[user]['sName']))
         result = sorted(result , key=lambda (a,b): a, reverse=True)
     
         maxUserNameLen = max([len(x) for (_, x) in result])
@@ -148,8 +158,10 @@ class Tippspiel(object):
             
         
     def printStatsOf(self, _user):
-        wholeName    = self.__users[_user]['gName'] + ' ' + self.__users[_user]['sName']
-        lenLine      = maxLenResultGameName + 18
+        self.__updateResults()
+        self.__updateUserPoints(_user)
+        wholeName    = self.users[_user]['gName'] + ' ' + self.users[_user]['sName']
+        lenLine      = self.__maxGameNameLenOfResults + 18
     
         print(wholeName.center(lenLine))
         print('-'*lenLine)
@@ -158,8 +170,8 @@ class Tippspiel(object):
     
             goalsHome = self.__matchResults[game]['goalsHomeTeam']
             goalsAway = self.__matchResults[game]['goalsAwayTeam']
-            tipHome = self.__users[_user][game]['tipGoalsHomeTeam']
-            tipAway = self.__users[_user][game]['tipGoalsAwayTeam']
+            tipHome = self.users[_user][game]['tipGoalsHomeTeam']
+            tipAway = self.users[_user][game]['tipGoalsAwayTeam']
     
             if   (tipHome == goalsHome and tipAway == goalsAway):
                 print('+2', end=' ')
@@ -170,7 +182,7 @@ class Tippspiel(object):
             else:
                 print('  ', end=' ')
     
-            print(game.replace('-', ' vs. ').rjust(maxLenResultGameName + 4), end=': ')
+            print(game.replace('-', ' vs. ').rjust(self.__maxGameNameLenOfResults + 4), end=': ')
     
             print(str(goalsHome) + '-' + str(goalsAway), end=' ')
             print('('+ str(tipHome) + '-' + str(tipAway) +')')
