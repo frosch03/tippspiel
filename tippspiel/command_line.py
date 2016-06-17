@@ -4,7 +4,8 @@ Author      : Matthias Brettschneider(bmr2lr)
 Date        : 17.06.2016
 
 Details : This file contains the main function for the delivered
-application. Here the command line parser is configured 
+application. Here the command line parser is configured
+
 """
 from os.path import expanduser
 
